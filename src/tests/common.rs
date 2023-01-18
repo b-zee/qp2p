@@ -8,7 +8,7 @@
 // Software.
 
 use super::{hash, local_addr, new_endpoint, new_endpoint_with_keepalive, random_msg};
-use crate::SendError;
+use crate::{SendError, WireMsg};
 use bytes::Bytes;
 use color_eyre::eyre::{bail, eyre, Report, Result};
 use futures::future;
@@ -47,7 +47,7 @@ async fn single_message() -> Result<()> {
     let (connection, _) = peer2.connect_to(&peer1_addr).await?;
     let msg_from_peer2 = random_msg(1024);
     connection
-        .send((Bytes::new(), Bytes::new(), msg_from_peer2.clone()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), msg_from_peer2.clone()))
         .await?;
 
     // Peer 1 gets an incoming connection
@@ -62,7 +62,10 @@ async fn single_message() -> Result<()> {
 
     // Peer 2 gets an incoming message
     if let Ok(message) = peer1_incoming_messages.next().timeout().await {
-        assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg_from_peer2)));
+        assert_eq!(
+            message?,
+            Some(WireMsg(Bytes::new(), Bytes::new(), msg_from_peer2))
+        );
     } else {
         bail!("No incoming message");
     }
@@ -82,7 +85,7 @@ async fn no_reuse_outgoing_connection() -> Result<()> {
     let (a_to_b, _) = alice.connect_to(&bob_addr).await?;
     let msg0 = random_msg(1024);
     a_to_b
-        .send((Bytes::new(), Bytes::new(), msg0.clone()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), msg0.clone()))
         .await?;
 
     // Bob should recieve an incoming connection and message
@@ -95,7 +98,7 @@ async fn no_reuse_outgoing_connection() -> Result<()> {
         };
 
     if let Ok(message) = bob_incoming_messages.next().timeout().await {
-        assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg0)));
+        assert_eq!(message?, Some(WireMsg(Bytes::new(), Bytes::new(), msg0)));
     } else {
         bail!("No incoming message");
     }
@@ -104,7 +107,7 @@ async fn no_reuse_outgoing_connection() -> Result<()> {
     let (a_to_b, _) = alice.connect_to(&bob_addr).await?;
     let msg1 = random_msg(1024);
     a_to_b
-        .send((Bytes::new(), Bytes::new(), msg1.clone()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), msg1.clone()))
         .await?;
 
     // bob gets nothing on the original connection
@@ -122,7 +125,7 @@ async fn no_reuse_outgoing_connection() -> Result<()> {
         };
 
     if let Ok(message) = bob_incoming_messages.next().timeout().await {
-        assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg1)));
+        assert_eq!(message?, Some(WireMsg(Bytes::new(), Bytes::new(), msg1)));
     } else {
         bail!("No incoming message");
     }
@@ -142,7 +145,7 @@ async fn no_reuse_incoming_connection() -> Result<()> {
     let (a_to_b, mut alice_incoming_messages) = alice.connect_to(&bob_addr).await?;
     let msg0 = random_msg(1024);
     a_to_b
-        .send((Bytes::new(), Bytes::new(), msg0.clone()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), msg0.clone()))
         .await?;
 
     // Bob should recieve an incoming connection and message
@@ -155,7 +158,7 @@ async fn no_reuse_incoming_connection() -> Result<()> {
         };
 
     if let Ok(message) = bob_incoming_messages.next().timeout().await {
-        assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg0)));
+        assert_eq!(message?, Some(WireMsg(Bytes::new(), Bytes::new(), msg0)));
     } else {
         bail!("No incoming message");
     }
@@ -164,7 +167,7 @@ async fn no_reuse_incoming_connection() -> Result<()> {
     let (b_to_a, _) = bob.connect_to(&alice_addr).await?;
     let msg1 = random_msg(1024);
     b_to_a
-        .send((Bytes::new(), Bytes::new(), msg1.clone()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), msg1.clone()))
         .await?;
 
     // Alice receives no message over the original connection
@@ -183,7 +186,7 @@ async fn no_reuse_incoming_connection() -> Result<()> {
     };
 
     if let Ok(message) = alice_incoming_messages.next().timeout().await {
-        assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg1)));
+        assert_eq!(message?, Some(WireMsg(Bytes::new(), Bytes::new(), msg1)));
     } else {
         bail!("No incoming message");
     }
@@ -225,22 +228,22 @@ async fn simultaneous_incoming_and_outgoing_connections() -> Result<()> {
 
     let msg0 = random_msg(1024);
     a_to_b
-        .send((Bytes::new(), Bytes::new(), msg0.clone()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), msg0.clone()))
         .await?;
 
     let msg1 = random_msg(1024);
     b_to_a
-        .send((Bytes::new(), Bytes::new(), msg1.clone()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), msg1.clone()))
         .await?;
 
     if let Ok(message) = alice_incoming_messages.next().timeout().await {
-        assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg1)));
+        assert_eq!(message?, Some(WireMsg(Bytes::new(), Bytes::new(), msg1)));
     } else {
         bail!("Missing incoming message");
     }
 
     if let Ok(message) = bob_incoming_messages.next().timeout().await {
-        assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg0)));
+        assert_eq!(message?, Some(WireMsg(Bytes::new(), Bytes::new(), msg0)));
     } else {
         bail!("Missing incoming message");
     }
@@ -263,11 +266,11 @@ async fn simultaneous_incoming_and_outgoing_connections() -> Result<()> {
 
     let msg2 = random_msg(1024);
     b_to_a
-        .send((Bytes::new(), Bytes::new(), msg2.clone()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), msg2.clone()))
         .await?;
 
     if let Ok(message) = alice_incoming_messages.next().timeout().await {
-        assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg2)));
+        assert_eq!(message?, Some(WireMsg(Bytes::new(), Bytes::new(), msg2)));
     }
 
     Ok(())
@@ -301,10 +304,10 @@ async fn multiple_concurrent_connects_to_the_same_peer() -> Result<()> {
             assert_eq!(a_to_c.remote_address(), carol_addr);
 
             b_to_a
-                .send((Bytes::new(), Bytes::new(), msg0.clone()))
+                .send(WireMsg(Bytes::new(), Bytes::new(), msg0.clone()))
                 .await?;
             c_to_a
-                .send((Bytes::new(), Bytes::new(), msg1.clone()))
+                .send(WireMsg(Bytes::new(), Bytes::new(), msg1.clone()))
                 .await?;
 
             // check bob hasnt been connected to for some reason
@@ -318,31 +321,34 @@ async fn multiple_concurrent_connects_to_the_same_peer() -> Result<()> {
 
             // Both messages are received  at the alice end
             if let Ok(message) = alice_incoming_messages.next().timeout().await {
-                assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg0)));
+                assert_eq!(message?, Some(WireMsg(Bytes::new(), Bytes::new(), msg0)));
             } else {
                 bail!("No message received from Bob");
             }
 
             if let Ok(message) = alice_incoming_messages_2.next().timeout().await {
-                assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg1)));
+                assert_eq!(message?, Some(WireMsg(Bytes::new(), Bytes::new(), msg1)));
             } else {
                 bail!("No message from carol");
             }
 
             a_to_b
-                .send((Bytes::new(), Bytes::new(), msg2.clone()))
+                .send(WireMsg(Bytes::new(), Bytes::new(), msg2.clone()))
                 .await?;
             a_to_c
-                .send((Bytes::new(), Bytes::new(), msg2.clone()))
+                .send(WireMsg(Bytes::new(), Bytes::new(), msg2.clone()))
                 .await?;
 
             if let Ok(message) = b_incoming_from_a.next().timeout().await {
-                assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg2.clone())));
+                assert_eq!(
+                    message?,
+                    Some(WireMsg(Bytes::new(), Bytes::new(), msg2.clone()))
+                );
             } else {
                 bail!("No message received from Alice to bob");
             }
             if let Ok(message) = c_incoming_from_a.next().timeout().await {
-                assert_eq!(message?, Some((Bytes::new(), Bytes::new(), msg2)));
+                assert_eq!(message?, Some(WireMsg(Bytes::new(), Bytes::new(), msg2)));
             } else {
                 bail!("No message received from Alive to Carol");
             }
@@ -383,7 +389,8 @@ async fn multiple_connections_with_many_concurrent_messages() -> Result<()> {
                 recv_incoming_connections.next().await
             {
                 let connection = Arc::new(connection);
-                while let Ok(Ok(Some((_, _, msg)))) = recv_incoming_messages.next().timeout().await
+                while let Ok(Ok(Some(WireMsg(_, _, msg)))) =
+                    recv_incoming_messages.next().timeout().await
                 {
                     info!(
                         "received from {:?} with message size {}",
@@ -403,7 +410,11 @@ async fn multiple_connections_with_many_concurrent_messages() -> Result<()> {
                             // Send the hash result back.
                             info!("About to send hash from receiver");
                             connection
-                                .send((Bytes::new(), Bytes::new(), hash_result.to_vec().into()))
+                                .send(WireMsg(
+                                    Bytes::new(),
+                                    Bytes::new(),
+                                    hash_result.to_vec().into(),
+                                ))
                                 .await?;
 
                             Ok::<_, Report>(())
@@ -442,7 +453,7 @@ async fn multiple_connections_with_many_concurrent_messages() -> Result<()> {
                     let _ = hash_results.insert(hash(message));
                     info!("sender #{} sending message #{}", id, index);
                     connection
-                        .send((Bytes::new(), Bytes::new(), message.clone()))
+                        .send(WireMsg(Bytes::new(), Bytes::new(), message.clone()))
                         .await?;
                 }
 
@@ -452,7 +463,8 @@ async fn multiple_connections_with_many_concurrent_messages() -> Result<()> {
                 );
                 let mut all_received_msgs = 0;
 
-                while let Ok(Ok(Some((_, _, msg)))) = recv_incoming_messages.next().timeout().await
+                while let Ok(Ok(Some(WireMsg(_, _, msg)))) =
+                    recv_incoming_messages.next().timeout().await
                 {
                     info!(
                         "#{} received from server {:?} with message size {}",
@@ -512,7 +524,8 @@ async fn multiple_connections_with_many_larger_concurrent_messages() -> Result<(
                 recv_incoming_connections.next().await
             {
                 let connection = Arc::new(connection);
-                while let Ok(Ok(Some((_, _, msg)))) = recv_incoming_messages.next().timeout().await
+                while let Ok(Ok(Some(WireMsg(_, _, msg)))) =
+                    recv_incoming_messages.next().timeout().await
                 {
                     info!(
                         "received from {:?} with message size {}",
@@ -532,7 +545,11 @@ async fn multiple_connections_with_many_larger_concurrent_messages() -> Result<(
                             // Send the hash result back.
                             info!("About to send hash from receiver");
                             connection
-                                .send((Bytes::new(), Bytes::new(), hash_result.to_vec().into()))
+                                .send(WireMsg(
+                                    Bytes::new(),
+                                    Bytes::new(),
+                                    hash_result.to_vec().into(),
+                                ))
                                 .await?;
 
                             Ok::<_, Report>(())
@@ -571,7 +588,7 @@ async fn multiple_connections_with_many_larger_concurrent_messages() -> Result<(
                     let _ = hash_results.insert(hash(message));
                     info!("sender #{} sending message #{}", id, index);
                     connection
-                        .send((Bytes::new(), Bytes::new(), message.clone()))
+                        .send(WireMsg(Bytes::new(), Bytes::new(), message.clone()))
                         .await?;
                 }
 
@@ -581,7 +598,8 @@ async fn multiple_connections_with_many_larger_concurrent_messages() -> Result<(
                 );
 
                 let mut all_received_msgs = 0;
-                while let Ok(Ok(Some((_, _, msg)))) = recv_incoming_messages.next().timeout().await
+                while let Ok(Ok(Some(WireMsg(_, _, msg)))) =
+                    recv_incoming_messages.next().timeout().await
                 {
                     info!(
                         "#{} received from server {:?} with message size {}",
@@ -635,7 +653,9 @@ async fn many_messages() -> Result<()> {
             async move {
                 info!("sending {}", id);
                 let msg = id.to_le_bytes().to_vec().into();
-                sender.send((Bytes::new(), Bytes::new(), msg)).await?;
+                sender
+                    .send(WireMsg(Bytes::new(), Bytes::new(), msg))
+                    .await?;
                 info!("sent {}", id);
 
                 Ok::<_, Report>(())
@@ -653,7 +673,8 @@ async fn many_messages() -> Result<()> {
             {
                 assert_eq!(connection.remote_address(), send_addr);
 
-                while let Ok(Ok(Some((_, _, msg)))) = recv_incoming_messages.next().timeout().await
+                while let Ok(Ok(Some(WireMsg(_, _, msg)))) =
+                    recv_incoming_messages.next().timeout().await
                 {
                     let id = usize::from_le_bytes(msg[..].try_into().unwrap());
                     info!("received {}", id);
@@ -676,20 +697,6 @@ async fn many_messages() -> Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn reachability() -> Result<()> {
-    let (ep1, _ep1_incoming) = new_endpoint_with_keepalive().await?;
-    let (ep2, _ep2_incoming) = new_endpoint_with_keepalive().await?;
-
-    if let Ok(()) = ep1.is_reachable(&"127.0.0.1:12345".parse()?).await {
-        bail!("Unexpected success");
-    };
-    let reachable_addr = ep2.local_addr();
-    ep1.is_reachable(&reachable_addr).await?;
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn client() -> Result<()> {
     use crate::{Config, Endpoint};
 
@@ -698,7 +705,7 @@ async fn client() -> Result<()> {
 
     let (client_to_server, mut client_messages) = client.connect_to(&server.local_addr()).await?;
     client_to_server
-        .send((Bytes::new(), Bytes::new(), b"hello"[..].into()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), b"hello"[..].into()))
         .await?;
 
     let (server_to_client, mut server_messages) = server_connections
@@ -708,7 +715,7 @@ async fn client() -> Result<()> {
 
     assert_eq!(server_to_client.remote_address(), client.local_addr());
 
-    let (_, _, message) = server_messages
+    let WireMsg(_, _, message) = server_messages
         .next()
         .timeout()
         .await
@@ -718,10 +725,10 @@ async fn client() -> Result<()> {
     assert_eq!(&message[..], b"hello");
 
     server_to_client
-        .send((Bytes::new(), Bytes::new(), b"world"[..].into()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), b"world"[..].into()))
         .await?;
 
-    let (_h, _d, message) = client_messages
+    let WireMsg(_h, _d, message) = client_messages
         .next()
         .timeout()
         .await
@@ -738,7 +745,7 @@ async fn client() -> Result<()> {
 
     // sending should now fail, since the connection was closed at the peer
     match client_to_server
-        .send((Bytes::new(), Bytes::new(), b"world"[..].into()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), b"world"[..].into()))
         .await
     {
         Err(crate::SendError::ConnectionLost(_)) => {}
@@ -763,7 +770,7 @@ async fn no_client_keep_alive_times_out() -> Result<()> {
 
     let (client_to_server, _client_messages) = client.connect_to(&server.local_addr()).await?;
     client_to_server
-        .send((Bytes::new(), Bytes::new(), b"hello"[..].into()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), b"hello"[..].into()))
         .await?;
 
     let (server_to_client, mut server_messages) = server_connections
@@ -773,7 +780,7 @@ async fn no_client_keep_alive_times_out() -> Result<()> {
 
     assert_eq!(server_to_client.remote_address(), client.local_addr());
 
-    let (_, _, message) = server_messages
+    let WireMsg(_, _, message) = server_messages
         .next()
         .timeout()
         .await
@@ -787,7 +794,7 @@ async fn no_client_keep_alive_times_out() -> Result<()> {
         .await;
 
     let err = server_to_client
-        .send((Bytes::new(), Bytes::new(), b"world"[..].into()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), b"world"[..].into()))
         .await;
 
     match err {
@@ -811,7 +818,7 @@ async fn client_keep_alive_works() -> Result<()> {
 
     let (client_to_server, mut client_messages) = client.connect_to(&server.local_addr()).await?;
     client_to_server
-        .send((Bytes::new(), Bytes::new(), b"hello"[..].into()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), b"hello"[..].into()))
         .await?;
 
     let (server_to_client, mut server_messages) = server_connections
@@ -821,7 +828,7 @@ async fn client_keep_alive_works() -> Result<()> {
 
     assert_eq!(server_to_client.remote_address(), client.local_addr());
 
-    let (_, _, message) = server_messages
+    let WireMsg(_, _, message) = server_messages
         .next()
         .timeout()
         .await
@@ -835,11 +842,11 @@ async fn client_keep_alive_works() -> Result<()> {
         .await;
 
     server_to_client
-        .send((Bytes::new(), Bytes::new(), b"world"[..].into()))
+        .send(WireMsg(Bytes::new(), Bytes::new(), b"world"[..].into()))
         .await
         .or_else(|e| bail!("Could not send expected message after wait: {e:?}"))?;
 
-    let (_h, _d, message) = client_messages
+    let WireMsg(_h, _d, message) = client_messages
         .next()
         .timeout()
         .await
